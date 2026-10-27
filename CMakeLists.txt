@@ -391,7 +391,9 @@ else()
 endif()
 
 if(UNIX)
-  add_compile_definitions(SYSCONFDIR="../${CONF_FOLDER_NAME}/")
+  # cmangos-deploy: an absolute path, so the servers find their configuration
+  # files whatever their working directory is.
+  add_compile_definitions(SYSCONFDIR="${CMAKE_INSTALL_PREFIX}/config/")
 endif()
 
 if(BUILD_GAME_SERVER OR BUILD_LOGIN_SERVER OR BUILD_EXTRACTORS)
