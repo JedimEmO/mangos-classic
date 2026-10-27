@@ -577,6 +577,7 @@ void World::LoadConfigSettings(bool reload)
     setConfig(CONFIG_UINT32_RABBIT_DAY, "RabbitDay", 0);
 
     setConfig(CONFIG_UINT32_INSTANCE_RESET_TIME_HOUR, "Instance.ResetTimeHour", 4);
+    setConfig(CONFIG_UINT32_INSTANCE_MAX_PER_HOUR, "Instance.MaxPerHour", PLAYER_NEW_INSTANCE_LIMIT_PER_HOUR);
     setConfig(CONFIG_UINT32_INSTANCE_UNLOAD_DELAY,    "Instance.UnloadDelay", 30 * MINUTE * IN_MILLISECONDS);
     setConfig(CONFIG_BOOL_DISABLE_INSTANCE_RELOCATE, "Instance.DisableRelocate", false);
 

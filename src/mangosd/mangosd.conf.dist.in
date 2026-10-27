@@ -674,6 +674,11 @@ LogColors = ""
 #        The hour of the day (0-23) when the global instance resets occur.
 #        Default: 4
 #
+#    Instance.MaxPerHour
+#        How many new instances an account may enter in an hour; game masters are not limited.
+#        Default: 5
+#                 0 (no limit)
+#
 #    Instance.UnloadDelay
 #        Unload the instance map from memory after some time if no players are inside.
 #        Default: 1800000 (miliseconds, i.e 30 minutes)
@@ -851,6 +856,7 @@ Instance.IgnoreLevel = 0
 Instance.IgnoreRaid = 0
 Instance.StrictCombatLockdown = 0
 Instance.ResetTimeHour = 4
+Instance.MaxPerHour = 5
 Instance.UnloadDelay = 1800000
 Instance.DisableRelocate = 0
 Quests.LowLevelHideDiff = 5

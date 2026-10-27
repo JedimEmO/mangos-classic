@@ -20429,7 +20429,7 @@ void Player::RemoveSpellLockout(SpellSchoolMask spellSchoolMask, std::set<uint32
     }
 }
 
-/* System for limiting instance entering to 5 per hour */
+/* System for limiting instance entering to Instance.MaxPerHour per hour, 5 by default; 0 for no limit */
 // check if player can enter new instance
 bool Player::CanEnterNewInstance(uint32 instanceId)
 {
@@ -20439,7 +20439,8 @@ bool Player::CanEnterNewInstance(uint32 instanceId)
     if (m_enteredInstances.find(instanceId) != m_enteredInstances.end())
         return true;
 
-    return m_enteredInstances.size() < PLAYER_NEW_INSTANCE_LIMIT_PER_HOUR;
+    const uint32 limit = sWorld.getConfig(CONFIG_UINT32_INSTANCE_MAX_PER_HOUR);
+    return !limit || m_enteredInstances.size() < limit;
 }
 
 // when instance was entered
