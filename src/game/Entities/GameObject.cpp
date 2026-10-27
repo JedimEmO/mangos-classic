@@ -17,6 +17,9 @@
  */
 
 #include "Entities/GameObject.h"
+#ifdef ENABLE_PLAYERBOTS
+#include "playerbot/GuildDungeon.h"
+#endif
 #include "Quests/QuestDef.h"
 #include "Globals/ObjectMgr.h"
 #include "Globals/ObjectAccessor.h"
@@ -1932,6 +1935,15 @@ void GameObject::Use(Unit* user, SpellEntry const* spellInfo)
             Player* player = (Player*)user;
 
             Player* targetPlayer = ObjectAccessor::FindPlayer(player->GetSelectionGuid());
+
+#ifdef ENABLE_PLAYERBOTS
+            // wow-playground: with no party member selected, the stone takes the player into its dungeon.
+            if (!targetPlayer || targetPlayer == player || !targetPlayer->IsInGroup(player))
+            {
+                GuildDungeon::UseStone(player, info->meetingstone.areaID);
+                return;
+            }
+#endif
 
             // accept only use by player from same group for caster except caster itself
             if (!targetPlayer || targetPlayer == player || !targetPlayer->IsInGroup(player))
