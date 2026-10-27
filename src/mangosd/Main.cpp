@@ -70,8 +70,36 @@ DatabaseType LogsDatabase;                                  ///< Accessor to the
 uint32 realmID;                                             ///< Id of the realm
 
 /// Launch the mangos server
+#ifndef _WIN32
+#include <csignal>
+#include <execinfo.h>
+#include <unistd.h>
+
+// wow-playground: a crash prints its stack before the process dies, so an assertion or a segfault on an unattended
+// server leaves a trace. The frames are module offsets; scripts/backtrace.sh resolves them against the binary.
+static void PrintBacktraceAndDie(int signal)
+{
+    static const char header[] = "\nwow-playground: crash on signal, backtrace follows\n";
+    write(STDERR_FILENO, header, sizeof(header) - 1);
+    void* frames[64];
+    int count = backtrace(frames, 64);
+    backtrace_symbols_fd(frames, count, STDERR_FILENO);
+    std::signal(signal, SIG_DFL);
+    std::raise(signal);
+}
+
+static void InstallCrashBacktrace()
+{
+    for (int signal : { SIGABRT, SIGSEGV, SIGBUS, SIGILL, SIGFPE })
+        std::signal(signal, PrintBacktraceAndDie);
+}
+#endif
+
 int main(int argc, char* argv[])
 {
+#ifndef _WIN32
+    InstallCrashBacktrace();
+#endif
     std::string auctionBotConfig, configFile, playerBotConfig, aiPlayerBotConfig, serviceParameter;
 
     boost::program_options::options_description desc("Allowed options");
