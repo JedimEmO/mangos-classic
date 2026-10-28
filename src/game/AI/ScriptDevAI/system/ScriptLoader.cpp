@@ -21,6 +21,7 @@ extern void AddSC_bosses_emerald_dragons();
 extern void AddSC_generic_creature();
 extern void AddSC_go_scripts();
 extern void AddSC_guards();
+extern void AddSC_guild_counter();
 extern void AddSC_item_scripts();
 extern void AddSC_npc_professions();
 extern void AddSC_npcs_special();
@@ -226,6 +227,7 @@ void AddScripts()
     AddSC_generic_creature();
     AddSC_go_scripts();
     AddSC_guards();
+    AddSC_guild_counter();
     AddSC_item_scripts();
     AddSC_npc_professions();
     AddSC_npcs_special();
