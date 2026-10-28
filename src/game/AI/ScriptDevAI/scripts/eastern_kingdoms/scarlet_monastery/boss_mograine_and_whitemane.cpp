@@ -362,12 +362,43 @@ struct boss_high_inquisitor_whitemaneAI : public CombatAI
     }
     instance_scarlet_monastery* m_instance;
     bool m_sleepCast = false;                               // Deep Sleep is cast: she is on her way to raise Mograine
+    // The event moves her twice: to the chapel (point 1) when Mograine falls, and to Mograine (point 2) after
+    // Deep Sleep. A move that has not arrived after POINT_MOVE_GUARD_MS is ended where she stands, as if it had,
+    // since until it ends she stays passive and cannot die. Scarlet Resurrection reaches Mograine from anywhere.
+    static constexpr uint32 POINT_MOVE_GUARD_MS = 15000;
+    uint32 m_pointMoveTime = 0;
+    bool m_pointArrived = false;
 
     void JustRespawned() override
     {
         CombatAI::JustRespawned();
         SetDeathPrevention(true);
         m_sleepCast = false;
+        m_pointMoveTime = 0;
+    }
+
+    void UpdateAI(const uint32 diff) override
+    {
+        if (m_creature->IsAlive() && m_creature->GetMotionMaster()->GetCurrentMovementGeneratorType() == POINT_MOTION_TYPE)
+        {
+            m_pointMoveTime += diff;
+            if (m_pointMoveTime >= POINT_MOVE_GUARD_MS)
+            {
+                m_pointMoveTime = 0;
+                const uint32 point = m_sleepCast ? 2 : 1;
+                sLog.outString("boss_high_inquisitor_whitemane: the move to point %u has not arrived after %u seconds, at %.1f %.1f %.1f; it ends where she stands",
+                    point, POINT_MOVE_GUARD_MS / IN_MILLISECONDS, m_creature->GetPositionX(), m_creature->GetPositionY(), m_creature->GetPositionZ());
+                // Clearing a move that stands still reports it arrived; one still under way it does not, so this does.
+                m_pointArrived = false;
+                m_creature->GetMotionMaster()->Clear();
+                if (!m_pointArrived)
+                    MovementInform(POINT_MOTION_TYPE, point);
+            }
+        }
+        else
+            m_pointMoveTime = 0;
+
+        CombatAI::UpdateAI(diff);
     }
 
     void DamageTaken(Unit* dealer, uint32& damage, DamageEffectType damageType, SpellEntry const* spellInfo) override
@@ -420,6 +451,8 @@ struct boss_high_inquisitor_whitemaneAI : public CombatAI
 
     void MovementInform(uint32 uiMotionType, uint32 uiPointId) override
     {
+        if (uiMotionType == POINT_MOTION_TYPE && (uiPointId == 1 || uiPointId == 2))
+            m_pointArrived = true;
         if (uiMotionType == POINT_MOTION_TYPE && uiPointId == 2)
         {
             if (m_instance)
