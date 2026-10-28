@@ -35,6 +35,37 @@
 
 namespace
 {
+    // Zul'Gurub and the Ruins of Ahn'Qiraj, raids for twenty in vanilla; fifteen of twenty is close to full strength
+    bool IsSmallRaid(uint32 mapId)
+    {
+        return mapId == 309 || mapId == 509;
+    }
+
+    // The boss whose death clears each raid
+    struct FinalBoss
+    {
+        uint32 map;
+        uint32 entry;
+    };
+    FinalBoss const finalBosses[] =
+    {
+        { 409, 11502 },                                     // Molten Core, Ragnaros
+        { 249, 10184 },                                     // Onyxia's Lair, Onyxia
+        { 469, 11583 },                                     // Blackwing Lair, Nefarian
+        { 309, 14834 },                                     // Zul'Gurub, Hakkar
+        { 509, 15339 },                                     // Ruins of Ahn'Qiraj, Ossirian the Unscarred
+        { 531, 15727 },                                     // Temple of Ahn'Qiraj, C'Thun's body; the Eye of C'Thun (15589) is not it
+        { 533, 15990 },                                     // Naxxramas, Kel'Thuzad
+    };
+
+    bool IsFinalBoss(uint32 mapId, uint32 entry)
+    {
+        for (FinalBoss const& boss : finalBosses)
+            if (boss.map == mapId && boss.entry == entry)
+                return true;
+        return false;
+    }
+
     // The tier a creature fights at: its map's, unless it serves a player.
     // At creation a summon's owner may not be set yet; pets and guardians have theirs, totems are known by their kind.
     uint8 TierOf(Creature const* creature)
@@ -84,6 +115,19 @@ void RaidTier::LoadAtStartup()
 
     // Instance ids are renumbered at startup and reused after a restart, so a row outlives no instance.
     CharacterDatabase.DirectExecute("DELETE FROM guildbot_instance_tier WHERE instance NOT IN (SELECT id FROM instance)");
+
+    // The clears of raids, kept as history: never deleted or renumbered.
+    // opened_at has an explicit default so the server never gives it an automatic ON UPDATE.
+    CharacterDatabase.DirectExecute(
+        "CREATE TABLE IF NOT EXISTS guildbot_raid_clear ("
+        " instance INT UNSIGNED NOT NULL,"
+        " map SMALLINT UNSIGNED NOT NULL,"
+        " tier TINYINT UNSIGNED NOT NULL,"
+        " account INT UNSIGNED NOT NULL,"
+        " opened_at TIMESTAMP NOT NULL DEFAULT '2000-01-01 00:00:00',"
+        " cleared_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,"
+        " PRIMARY KEY (instance, cleared_at)"
+        ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 }
 
 uint8 RaidTier::SelectForInstance(MapEntry const* mapEntry, uint32 instanceId, Player* creator, bool knownInstance)
@@ -112,13 +156,17 @@ uint8 RaidTier::SelectForInstance(MapEntry const* mapEntry, uint32 instanceId, P
 float RaidTier::HealthMultiplier(Creature const* creature)
 {
     uint8 const tier = TierOf(creature);
-    return tier ? Multiplier(CONFIG_FLOAT_RAID_TIER_HEALTH_AT_TIER1, tier) : 1.0f;
+    if (!tier)
+        return 1.0f;
+    return Multiplier(IsSmallRaid(creature->GetMapId()) ? CONFIG_FLOAT_RAID_TIER_SMALL_RAID_HEALTH_AT_TIER1 : CONFIG_FLOAT_RAID_TIER_HEALTH_AT_TIER1, tier);
 }
 
 float RaidTier::DamageMultiplier(Creature const* creature)
 {
     uint8 const tier = TierOf(creature);
-    return tier ? Multiplier(CONFIG_FLOAT_RAID_TIER_DAMAGE_AT_TIER1, tier) : 1.0f;
+    if (!tier)
+        return 1.0f;
+    return Multiplier(IsSmallRaid(creature->GetMapId()) ? CONFIG_FLOAT_RAID_TIER_SMALL_RAID_DAMAGE_AT_TIER1 : CONFIG_FLOAT_RAID_TIER_DAMAGE_AT_TIER1, tier);
 }
 
 void RaidTier::AddExtraLoot(Loot& loot, LootTemplate const& lootTemplate, Player const* lootOwner, bool rate)
@@ -144,4 +192,22 @@ void RaidTier::AddExtraLoot(Loot& loot, LootTemplate const& lootTemplate, Player
 
     for (uint32 i = 0; i < draws; ++i)
         lootTemplate.ProcessExtraDraw(loot, lootOwner, rate);
+}
+
+void RaidTier::OnCreatureKilled(Creature const* victim)
+{
+    Map const* map = victim->GetMap();
+    if (!map->GetRaidTier() || !IsFinalBoss(map->GetId(), victim->GetEntry()))
+        return;
+
+    // The tier, account and opening time come from the instance's tier row. One clear per opening of an instance:
+    // a boss killed again, as after a GM respawn, finds its clear already written.
+    CharacterDatabase.PExecute(
+        "INSERT INTO guildbot_raid_clear (instance, map, tier, account, opened_at)"
+        " SELECT t.instance, t.map, t.tier, t.account, t.created_at FROM guildbot_instance_tier t"
+        " WHERE t.instance = '%u' AND t.map = '%u'"
+        " AND NOT EXISTS (SELECT 1 FROM guildbot_raid_clear c WHERE c.instance = t.instance AND c.opened_at = t.created_at)",
+        map->GetInstanceId(), map->GetId());
+
+    sLog.outString("Raid tier: instance %u of map %u cleared at tier %u", map->GetInstanceId(), map->GetId(), uint32(map->GetRaidTier()));
 }

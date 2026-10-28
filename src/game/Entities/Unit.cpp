@@ -1410,6 +1410,7 @@ void Unit::JustKilledCreature(Unit* killer, Creature* victim, Player* responsibl
                 static_cast<DungeonMap*>(map)->PermBindAllPlayers(creditedPlayer);
             }
             static_cast<DungeonMap*>(map)->GetPersistanceState()->UpdateEncounterState(ENCOUNTER_CREDIT_KILL_CREATURE, victim->GetEntry());
+            RaidTier::OnCreatureKilled(victim);
         }
     }
 

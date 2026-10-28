@@ -694,6 +694,7 @@ LogColors = ""
 #        guild chose for that raid (guildd_raid_tier in the characters database; no row is tier 1), and recorded in
 #        guildbot_instance_tier. Every creature of the raid that does not serve a player has its health and damage
 #        multiplied by the tier's multipliers; dungeons, battlegrounds and the open world are never changed.
+#        The death of a raid's final boss records a clear in guildbot_raid_clear.
 #        Default: 1 (true)
 #                 0 (false, raids are as they are in vanilla)
 #
@@ -703,6 +704,13 @@ LogColors = ""
 #        Damage covers melee and ranged attacks and the direct and periodic damage of spells.
 #        Default: 0.40 (health)
 #                 0.60 (damage)
+#
+#    Raid.Tier.SmallRaidHealthAtTier1
+#    Raid.Tier.SmallRaidDamageAtTier1
+#        The same for the raids for twenty players in vanilla, Zul'Gurub and the Ruins of Ahn'Qiraj, which fifteen
+#        players face at close to full strength. StepPerTier and the extra loot are the same as for the other raids.
+#        Default: 0.80 (health)
+#                 0.85 (damage)
 #
 #    Raid.Tier.StepPerTier
 #        How much each tier above 1 adds: a multiplier is AtTier1 x (1 + StepPerTier x (tier - 1)).
@@ -888,6 +896,8 @@ Instance.DisableRelocate = 0
 Raid.Tier.Enable = 1
 Raid.Tier.HealthAtTier1 = 0.40
 Raid.Tier.DamageAtTier1 = 0.60
+Raid.Tier.SmallRaidHealthAtTier1 = 0.80
+Raid.Tier.SmallRaidDamageAtTier1 = 0.85
 Raid.Tier.StepPerTier = 0.15
 Raid.Tier.ExtraLootPerTier = 0.25
 Raid.Tier.ExtraLootMax = 3
