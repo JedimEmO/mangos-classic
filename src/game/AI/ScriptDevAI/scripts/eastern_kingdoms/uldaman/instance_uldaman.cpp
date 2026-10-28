@@ -28,6 +28,7 @@ EndScriptData
 
 instance_uldaman::instance_uldaman(Map* pMap) : ScriptedInstance(pMap),
     m_uiKeeperCooldown(0),
+    m_uiArchaedasWakeTimer(0),
     m_uiStoneKeepersFallen(0)
 {
     Initialize();
@@ -201,7 +202,11 @@ void instance_uldaman::StartEvent(uint32 uiEventId, Player* pPlayer)
     else if (uiEventId == EVENT_ID_ALTAR_ARCHAEDAS)
     {
         if (GetData(TYPE_ARCHAEDAS) == NOT_STARTED || GetData(TYPE_ARCHAEDAS) == FAIL)
+        {
             SetData(TYPE_ARCHAEDAS, SPECIAL);
+            // His AI wakes him in 6 seconds; if it has not by this, the instance does.
+            m_uiArchaedasWakeTimer = 8000;
+        }
     }
 }
 
@@ -265,6 +270,27 @@ void instance_uldaman::OnCreatureDeath(Creature* pCreature)
 
 void instance_uldaman::Update(uint32 uiDiff)
 {
+    // Archaedas still asleep after the altar's event, his own wake not run: free him and set him on the starter.
+    if (m_uiArchaedasWakeTimer)
+    {
+        if (m_uiArchaedasWakeTimer <= uiDiff)
+        {
+            m_uiArchaedasWakeTimer = 0;
+            Creature* pArchaedas = GetSingleCreatureFromStorage(NPC_ARCHAEDAS);
+            if (pArchaedas && pArchaedas->IsAlive() && GetData(TYPE_ARCHAEDAS) == SPECIAL
+                && pArchaedas->HasFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_UNINTERACTIBLE))
+            {
+                pArchaedas->RemoveAurasDueToSpell(SPELL_FREEZE_ANIM);
+                pArchaedas->RemoveFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_UNINTERACTIBLE);
+                Player* pPlayer = instance->GetPlayer(m_playerGuid);
+                if (pPlayer && pPlayer->IsAlive() && pArchaedas->AI())
+                    pArchaedas->AI()->AttackStart(pPlayer);
+            }
+        }
+        else
+            m_uiArchaedasWakeTimer -= uiDiff;
+    }
+
     if (GetData(TYPE_ALTAR_EVENT) != IN_PROGRESS)
         return;
 

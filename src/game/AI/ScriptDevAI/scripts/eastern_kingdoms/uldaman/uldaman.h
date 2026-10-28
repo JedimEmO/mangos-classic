@@ -73,6 +73,7 @@ class instance_uldaman : public ScriptedInstance
         ObjectGuid m_playerGuid;
 
         uint32 m_uiKeeperCooldown;
+        uint32 m_uiArchaedasWakeTimer;              // after the altar's event, when Archaedas must be awake by
         uint32 m_uiStoneKeepersFallen;
 
         GuidList m_lWardens;

@@ -410,6 +410,17 @@ struct boss_high_inquisitor_whitemaneAI : public CombatAI
         }
         if (uiMotionType == POINT_MOTION_TYPE && uiPointId == 1)
         {
+            // Already in combat when she comes, EnterCombat does not run again; she takes up the fight here instead,
+            // or she stays passive with no combat actions, never casts Deep Sleep, never raises Mograine and cannot die.
+            if (m_instance && m_instance->GetData(TYPE_MOGRAINE_AND_WHITE_EVENT) == IN_PROGRESS && m_creature->IsInCombat())
+            {
+                SetCombatScriptStatus(false);
+                ResetCombatAction(WHITEMANE_ACTION_HEAL, 10000u);
+                ResetCombatAction(WHITEMANE_ACTION_POWERWORD_SHIELD, 15000u);
+                ResetCombatAction(WHITEMANE_ACTION_HOLY_SMITE, 100u);
+                SetMeleeEnabled(true);
+                SetReactState(REACT_AGGRESSIVE);
+            }
             m_creature->SetInCombatWithZone();
             AttackClosestEnemy();
         }

@@ -101,6 +101,9 @@ struct boss_archaedasAI : public ScriptedAI
     {
         // so many things are based in this script on instance data
         // so if we don't have access to it better do nothing
+        // The instance may not have been there when the AI was made; it is asked again.
+        if (!m_pInstance)
+            m_pInstance = (instance_uldaman*)m_creature->GetInstanceData();
         if (!m_pInstance)
             return;
 
