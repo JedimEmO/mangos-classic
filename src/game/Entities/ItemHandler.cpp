@@ -26,6 +26,7 @@
 #include "Entities/Item.h"
 #include "Entities/UpdateData.h"
 #include "Chat/Chat.h"
+#include "Guilds/GuildVault.h"
 
 void WorldSession::HandleSplitItemOpcode(WorldPacket& recv_data)
 {
@@ -493,6 +494,9 @@ void WorldSession::HandleSellItemOpcode(WorldPacket& recv_data)
         return;
     }
 
+    if (sGuildVault.HandleSell(_player, pCreature, itemGuid, count))    // selling to a vaultkeeper puts the item in the guild vault
+        return;
+
     Item* pItem = _player->GetItemByGuid(itemGuid);
 
     if (!pItem)
@@ -650,6 +654,9 @@ void WorldSession::HandleBuyItemInSlotOpcode(WorldPacket& recv_data)
 
     recv_data >> vendorGuid >> item >> bagGuid >> bagslot >> count;
 
+    if (sGuildVault.HandleBuy(_player, vendorGuid, item, count))       // buying from a vaultkeeper takes from the guild vault
+        return;
+
     uint8 bag = NULL_BAG;                                   // init for case invalid bagGUID
 
     // find bag slot by bag guid
@@ -687,6 +694,9 @@ void WorldSession::HandleBuyItemOpcode(WorldPacket& recv_data)
 
     recv_data >> vendorGuid >> item >> count >> unk1;
 
+    if (sGuildVault.HandleBuy(_player, vendorGuid, item, count))       // buying from a vaultkeeper takes from the guild vault
+        return;
+
     GetPlayer()->BuyItemFromVendor(vendorGuid, item, count, NULL_BAG, NULL_SLOT);
 }
 
@@ -720,6 +730,9 @@ void WorldSession::SendListInventory(ObjectGuid vendorguid) const
     // Stop the npc if moving
     if (uint32 pauseTimer = pCreature->GetInteractionPauseTimer())
         pCreature->GetMotionMaster()->PauseWaypoints(pauseTimer);
+
+    if (sGuildVault.SendList(_player, pCreature))                       // a vaultkeeper shows the guild vault
+        return;
 
     VendorItemData const* vItems = pCreature->GetVendorItems();
     VendorItemData const* tItems = pCreature->GetVendorTemplateItems();
