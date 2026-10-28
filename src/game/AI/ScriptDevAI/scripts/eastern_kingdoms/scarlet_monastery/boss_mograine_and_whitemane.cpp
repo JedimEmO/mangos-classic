@@ -361,11 +361,30 @@ struct boss_high_inquisitor_whitemaneAI : public CombatAI
         }
     }
     instance_scarlet_monastery* m_instance;
+    bool m_sleepCast = false;                               // Deep Sleep is cast: she is on her way to raise Mograine
 
     void JustRespawned() override
     {
         CombatAI::JustRespawned();
         SetDeathPrevention(true);
+        m_sleepCast = false;
+    }
+
+    void DamageTaken(Unit* dealer, uint32& damage, DamageEffectType damageType, SpellEntry const* spellInfo) override
+    {
+        CombatAI::DamageTaken(dealer, damage, damageType, spellInfo);
+        // Met by players before she reached Mograine, or already fighting when she did: still passive from his fall,
+        // she takes up the fight where she is, so that her Deep Sleep and his resurrection come at half health.
+        if (!m_sleepCast && GetCombatScriptStatus() && m_instance && m_instance->GetData(TYPE_MOGRAINE_AND_WHITE_EVENT) == IN_PROGRESS
+            && m_creature->GetMotionMaster()->GetCurrentMovementGeneratorType() != POINT_MOTION_TYPE)
+        {
+            SetCombatScriptStatus(false);
+            ResetCombatAction(WHITEMANE_ACTION_HEAL, 10000u);
+            ResetCombatAction(WHITEMANE_ACTION_POWERWORD_SHIELD, 15000u);
+            ResetCombatAction(WHITEMANE_ACTION_HOLY_SMITE, 100u);
+            SetMeleeEnabled(true);
+            SetReactState(REACT_AGGRESSIVE);
+        }
     }
 
     void EnterEvadeMode() override
@@ -487,6 +506,7 @@ struct boss_high_inquisitor_whitemaneAI : public CombatAI
             {
                 if (m_creature->GetHealthPercent() <= 50.0f)
                 {
+                    m_sleepCast = true;
                     DoCastSpellIfCan(nullptr, SPELL_DEEPSLEEP, CAST_INTERRUPT_PREVIOUS);
                     SetCombatMovement(false);
                     SetMeleeEnabled(false);

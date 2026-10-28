@@ -280,6 +280,7 @@ void instance_uldaman::Update(uint32 uiDiff)
             if (pArchaedas && pArchaedas->IsAlive() && GetData(TYPE_ARCHAEDAS) == SPECIAL
                 && pArchaedas->HasFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_UNINTERACTIBLE))
             {
+                sLog.outString("instance_uldaman: Archaedas still asleep 8 seconds after the altar's event; the instance wakes him");
                 pArchaedas->RemoveAurasDueToSpell(SPELL_FREEZE_ANIM);
                 pArchaedas->RemoveFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_UNINTERACTIBLE);
                 Player* pPlayer = instance->GetPlayer(m_playerGuid);
