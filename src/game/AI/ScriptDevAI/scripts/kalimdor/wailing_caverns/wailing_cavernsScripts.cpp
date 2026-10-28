@@ -125,6 +125,12 @@ struct npc_disciple_of_naralexAI : public npc_escortAI
     uint32 m_uiPoint;
     uint8 m_uiSubeventPhase;
 
+    // The escort path's first point lies 0.04 yards from his spawn. In the lab his walk stayed on that leg for good,
+    // the waypoint movement on top and moving, with no point reached. If no point is reached this long after the
+    // escort starts, the walk goes on from point 2: he skips point 1's wait and its line of preparation.
+    static constexpr uint32 FIRST_POINT_GUARD_MS = 20000;
+    uint32 m_uiFirstPointTimer = 0;
+
     void Reset() override
     {
         m_uiSleepTimer      = 5000;
@@ -141,6 +147,7 @@ struct npc_disciple_of_naralexAI : public npc_escortAI
             m_uiSubeventPhase = 0;
 
             m_uiSummonedAlive = 0;
+            m_uiFirstPointTimer = 0;
         }
     }
 
@@ -195,6 +202,7 @@ struct npc_disciple_of_naralexAI : public npc_escortAI
     {
         if (m_instance)
             m_instance->SetData(TYPE_DISCIPLE, IN_PROGRESS);
+        m_uiFirstPointTimer = FIRST_POINT_GUARD_MS;
     }
 
     void WaypointReached(uint32 uiPointId) override
@@ -255,6 +263,25 @@ struct npc_disciple_of_naralexAI : public npc_escortAI
 
     void UpdateEscortAI(const uint32 uiDiff) override
     {
+        if (m_uiFirstPointTimer)
+        {
+            if (!HasEscortState(STATE_ESCORT_ESCORTING) || m_creature->GetMotionMaster()->getLastReachedWaypoint() != 0)
+                m_uiFirstPointTimer = 0;
+            else if (m_uiFirstPointTimer <= uiDiff)
+            {
+                m_uiFirstPointTimer = 0;
+                sLog.outString("npc_disciple_of_naralex: no point of the escort path reached %u seconds after it started, at %.1f %.1f %.1f with movement %u on top; it goes on from point 2",
+                    FIRST_POINT_GUARD_MS / IN_MILLISECONDS, m_creature->GetPositionX(), m_creature->GetPositionY(), m_creature->GetPositionZ(),
+                    uint32(m_creature->GetMotionMaster()->GetCurrentMovementGeneratorType()));
+                // The pause stops whatever spline he is on, and the unpause moves him on the next tick.
+                SetEscortPaused(true);
+                SetCurrentWaypoint(2);
+                SetEscortPaused(false);
+            }
+            else
+                m_uiFirstPointTimer -= uiDiff;
+        }
+
         if (m_uiEventTimer)
         {
             if (m_uiEventTimer <= uiDiff)
