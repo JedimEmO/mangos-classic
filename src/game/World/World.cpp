@@ -37,6 +37,7 @@
 #include "AI/EventAI/CreatureEventAIMgr.h"
 #include "AI/ScriptDevAI/ScriptDevAIMgr.h"
 #include "Guilds/GuildMgr.h"
+#include "Guilds/GuildVault.h"
 #include "Spells/SpellMgr.h"
 #include "Chat/Chat.h"
 #include "Server/DBCStores.h"
@@ -1311,6 +1312,7 @@ void World::SetInitialWorldSettings()
 
     sLog.outString("Loading Guilds...");
     sGuildMgr.LoadGuilds();
+    sGuildVault.LoadAtStartup();                            // the competition's guild vaults, by guildd's guild key
 
     sLog.outString("Loading Groups...");
     sObjectMgr.LoadGroups();
