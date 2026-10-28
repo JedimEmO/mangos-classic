@@ -31,7 +31,8 @@ struct MapEntry;
  * Raid tiers. Every raid instance has a tier, 1 or higher, fixed when the instance is created:
  * the tier the creator's guild (its account) chose for that raid in guildd_raid_tier, or 1.
  * Tier 1 is the raid tuned for fifteen players; each tier above adds a step of health and damage,
- * and gives bosses a chance at more loot. The multipliers are Raid.Tier.* in mangosd.conf.
+ * and gives bosses a chance at more loot. The multipliers are Raid.Tier.* in mangosd.conf;
+ * the raids for twenty (Zul'Gurub, the Ruins of Ahn'Qiraj) have a milder tier 1 of their own.
  * A map that is not a raid has tier 0, which changes nothing.
  */
 namespace RaidTier
@@ -52,6 +53,9 @@ namespace RaidTier
 
     // Extra draws from a boss's loot template, on a tier above 1. Called while the loot is filled.
     void AddExtraLoot(Loot& loot, LootTemplate const& lootTemplate, Player const* lootOwner, bool rate);
+
+    // Records a clear in guildbot_raid_clear when the final boss of a tiered raid instance is killed.
+    void OnCreatureKilled(Creature const* victim);
 }
 
 #endif
