@@ -240,6 +240,19 @@ struct npc_disciple_of_naralexAI : public npc_escortAI
             m_uiEventTimer = 2000;
     }
 
+    // The circle's adders and vipers despawn after 20 seconds out of combat: one gone that way is gone as a death is,
+    // or the walk waits for it forever. A summon's corpse despawning after its death is counted already.
+    void SummonedCreatureDespawn(Creature* pSummoned) override
+    {
+        if (!pSummoned->IsAlive() || m_uiSummonedAlive == 0)
+            return;
+
+        --m_uiSummonedAlive;
+
+        if (m_uiSummonedAlive == 0 && m_uiEventTimer == 0)
+            m_uiEventTimer = 2000;
+    }
+
     void UpdateEscortAI(const uint32 uiDiff) override
     {
         if (m_uiEventTimer)
