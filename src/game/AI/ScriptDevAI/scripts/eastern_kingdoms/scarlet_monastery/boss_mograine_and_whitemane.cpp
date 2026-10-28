@@ -363,11 +363,18 @@ struct boss_high_inquisitor_whitemaneAI : public CombatAI
     instance_scarlet_monastery* m_instance;
     bool m_sleepCast = false;                               // Deep Sleep is cast: she is on her way to raise Mograine
     // The event moves her twice: to the chapel (point 1) when Mograine falls, and to Mograine (point 2) after
-    // Deep Sleep. A move that has not arrived after POINT_MOVE_GUARD_MS is ended where she stands, as if it had,
-    // since until it ends she stays passive and cannot die. Scarlet Resurrection reaches Mograine from anywhere.
+    // Deep Sleep. A move that has not arrived POINT_MOVE_GUARD_MS after it is due is ended where she stands, as if
+    // it had, since until it ends she stays passive and cannot die. Scarlet Resurrection reaches Mograine from anywhere.
+    // The time counts from when the move is due, whatever her movement on top: a count of the time the move was on
+    // top never reached the guard in the lab, though every sample showed it there.
+    // Below half health in the event she casts Deep Sleep, a combat action, which runs only while she has a target.
+    // In the lab she had none, at 1 hp, so she never cast it: past POINT_MOVE_GUARD_MS below half health the cast is
+    // made for her, and the move to Mograine follows.
     static constexpr uint32 POINT_MOVE_GUARD_MS = 15000;
     uint32 m_pointMoveTime = 0;
-    bool m_pointArrived = false;
+    uint32 m_lowTime = 0;                                   // how long she has been below half health in the event
+    uint32 m_pointDue = 0;                                  // the point she is on her way to, or 0
+    uint32 m_pointsReached = 0;                             // bit 1 for point 1, bit 2 for point 2
 
     void JustRespawned() override
     {
@@ -375,28 +382,56 @@ struct boss_high_inquisitor_whitemaneAI : public CombatAI
         SetDeathPrevention(true);
         m_sleepCast = false;
         m_pointMoveTime = 0;
+        m_pointDue = 0;
+        m_pointsReached = 0;
+        m_lowTime = 0;
     }
 
     void UpdateAI(const uint32 diff) override
     {
-        if (m_creature->IsAlive() && m_creature->GetMotionMaster()->GetCurrentMovementGeneratorType() == POINT_MOTION_TYPE)
+        const bool inEvent = m_instance && m_instance->GetData(TYPE_MOGRAINE_AND_WHITE_EVENT) == IN_PROGRESS;
+        if (inEvent && !m_sleepCast && m_creature->IsAlive() && m_creature->GetHealthPercent() <= 50.0f)
+        {
+            m_lowTime += diff;
+            if (m_lowTime >= POINT_MOVE_GUARD_MS)
+            {
+                m_lowTime = 0;
+                sLog.outString("boss_high_inquisitor_whitemane: below half health for %u seconds in the event without Deep Sleep, with %s; it is cast now",
+                    POINT_MOVE_GUARD_MS / IN_MILLISECONDS, m_creature->GetVictim() ? "a target" : "no target");
+                ExecuteAction(WHITEMANE_ACTION_DEEP_SLEEP);
+            }
+        }
+        else
+            m_lowTime = 0;
+
+        // Due: point 2 from Deep Sleep on, point 1 from Mograine's fall on, each until she reaches it.
+        uint32 due = 0;
+        if (m_sleepCast)
+            due = (m_pointsReached & 2) ? 0 : 2;
+        else if (inEvent)
+            due = (m_pointsReached & 1) ? 0 : 1;
+        if (due != m_pointDue)
+        {
+            m_pointDue = due;
+            m_pointMoveTime = 0;
+        }
+        if (m_pointDue && m_creature->IsAlive())
         {
             m_pointMoveTime += diff;
             if (m_pointMoveTime >= POINT_MOVE_GUARD_MS)
             {
                 m_pointMoveTime = 0;
-                const uint32 point = m_sleepCast ? 2 : 1;
-                sLog.outString("boss_high_inquisitor_whitemane: the move to point %u has not arrived after %u seconds, at %.1f %.1f %.1f; it ends where she stands",
-                    point, POINT_MOVE_GUARD_MS / IN_MILLISECONDS, m_creature->GetPositionX(), m_creature->GetPositionY(), m_creature->GetPositionZ());
-                // Clearing a move that stands still reports it arrived; one still under way it does not, so this does.
-                m_pointArrived = false;
+                const uint32 point = m_pointDue;
+                sLog.outString("boss_high_inquisitor_whitemane: the move to point %u has not arrived after %u seconds, at %.1f %.1f %.1f with movement %u on top; it ends where she stands",
+                    point, POINT_MOVE_GUARD_MS / IN_MILLISECONDS, m_creature->GetPositionX(), m_creature->GetPositionY(), m_creature->GetPositionZ(),
+                    uint32(m_creature->GetMotionMaster()->GetCurrentMovementGeneratorType()));
+                // Clearing a move that stands still reports it arrived; one still under way, or under a chase, it does not,
+                // so this does.
                 m_creature->GetMotionMaster()->Clear();
-                if (!m_pointArrived)
+                if (!(m_pointsReached & point))
                     MovementInform(POINT_MOTION_TYPE, point);
             }
         }
-        else
-            m_pointMoveTime = 0;
 
         CombatAI::UpdateAI(diff);
     }
@@ -452,7 +487,7 @@ struct boss_high_inquisitor_whitemaneAI : public CombatAI
     void MovementInform(uint32 uiMotionType, uint32 uiPointId) override
     {
         if (uiMotionType == POINT_MOTION_TYPE && (uiPointId == 1 || uiPointId == 2))
-            m_pointArrived = true;
+            m_pointsReached |= uiPointId;
         if (uiMotionType == POINT_MOTION_TYPE && uiPointId == 2)
         {
             if (m_instance)
