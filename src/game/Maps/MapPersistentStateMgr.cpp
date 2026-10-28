@@ -701,6 +701,7 @@ void MapPersistentStateManager::DeleteInstanceFromDB(uint32 instanceid)
         CharacterDatabase.PExecute("DELETE FROM group_instance WHERE instance = '%u'", instanceid);
         CharacterDatabase.PExecute("DELETE FROM creature_respawn WHERE instance = '%u'", instanceid);
         CharacterDatabase.PExecute("DELETE FROM gameobject_respawn WHERE instance = '%u'", instanceid);
+        CharacterDatabase.PExecute("DELETE FROM guildbot_instance_tier WHERE instance = '%u'", instanceid);
         CharacterDatabase.CommitTransaction();
     }
 }
@@ -784,6 +785,7 @@ void MapPersistentStateManager::CleanupInstances()
     // clean unused respawn data
     CharacterDatabase.Execute("DELETE FROM creature_respawn WHERE instance <> 0 AND instance NOT IN (SELECT id FROM instance)");
     CharacterDatabase.Execute("DELETE FROM gameobject_respawn WHERE instance <> 0 AND instance NOT IN (SELECT id FROM instance)");
+    CharacterDatabase.Execute("DELETE FROM guildbot_instance_tier WHERE instance NOT IN (SELECT id FROM instance)");
     // execute transaction directly
     CharacterDatabase.CommitTransaction();
 
@@ -832,6 +834,7 @@ void MapPersistentStateManager::PackInstances() const
             CharacterDatabase.PExecute("UPDATE character_instance SET instance = '%u' WHERE instance = '%u'", InstanceNumber, i);
             CharacterDatabase.PExecute("UPDATE instance SET id = '%u' WHERE id = '%u'", InstanceNumber, i);
             CharacterDatabase.PExecute("UPDATE group_instance SET instance = '%u' WHERE instance = '%u'", InstanceNumber, i);
+            CharacterDatabase.PExecute("UPDATE guildbot_instance_tier SET instance = '%u' WHERE instance = '%u'", InstanceNumber, i);
             // execute transaction synchronously
             CharacterDatabase.CommitTransaction();
         }
@@ -940,6 +943,7 @@ void MapPersistentStateManager::_ResetOrWarnAll(uint32 mapid, bool warn, uint32 
         CharacterDatabase.PExecute("DELETE FROM character_instance USING character_instance LEFT JOIN instance ON character_instance.instance = id WHERE map = '%u'", mapid);
         CharacterDatabase.PExecute("DELETE FROM group_instance USING group_instance LEFT JOIN instance ON group_instance.instance = id WHERE map = '%u'", mapid);
         CharacterDatabase.PExecute("DELETE FROM instance WHERE map = '%u'", mapid);
+        CharacterDatabase.PExecute("DELETE FROM guildbot_instance_tier WHERE map = '%u'", mapid);
         CharacterDatabase.CommitTransaction();
 
         // calculate the next reset time

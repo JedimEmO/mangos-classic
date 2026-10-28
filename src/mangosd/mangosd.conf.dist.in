@@ -689,6 +689,32 @@ LogColors = ""
 #        Default: 0 - false - relocates player after being logged out in instance for more than 15 minutes or instance reset
 #                 1 - true - location is kept
 #
+#    Raid.Tier.Enable
+#        Raid tiers: every raid instance has a tier, 1 or higher, set when it is created from the tier the creator's
+#        guild chose for that raid (guildd_raid_tier in the characters database; no row is tier 1), and recorded in
+#        guildbot_instance_tier. Every creature of the raid that does not serve a player has its health and damage
+#        multiplied by the tier's multipliers; dungeons, battlegrounds and the open world are never changed.
+#        Default: 1 (true)
+#                 0 (false, raids are as they are in vanilla)
+#
+#    Raid.Tier.HealthAtTier1
+#    Raid.Tier.DamageAtTier1
+#        Creature health and damage at tier 1, the raid tuned for fifteen players instead of forty.
+#        Damage covers melee and ranged attacks and the direct and periodic damage of spells.
+#        Default: 0.40 (health)
+#                 0.60 (damage)
+#
+#    Raid.Tier.StepPerTier
+#        How much each tier above 1 adds: a multiplier is AtTier1 x (1 + StepPerTier x (tier - 1)).
+#        Default: 0.15
+#
+#    Raid.Tier.ExtraLootPerTier
+#    Raid.Tier.ExtraLootMax
+#        A boss of a raid at tier T draws ExtraLootPerTier x (T - 1) more times from its loot on average (the whole part
+#        always, the rest as a chance), each draw one more item from a pool it drops from; at most ExtraLootMax draws.
+#        Default: 0.25
+#                 3
+#
 #    Quests.LowLevelHideDiff
 #        Quest level difference to hide for player low level quests:
 #        if player_level > quest_level + LowLevelQuestsHideDiff then quest "!" mark not show for quest giver
@@ -859,6 +885,12 @@ Instance.ResetTimeHour = 4
 Instance.MaxPerHour = 5
 Instance.UnloadDelay = 1800000
 Instance.DisableRelocate = 0
+Raid.Tier.Enable = 1
+Raid.Tier.HealthAtTier1 = 0.40
+Raid.Tier.DamageAtTier1 = 0.60
+Raid.Tier.StepPerTier = 0.15
+Raid.Tier.ExtraLootPerTier = 0.25
+Raid.Tier.ExtraLootMax = 3
 Quests.LowLevelHideDiff = 5
 Quests.HighLevelHideDiff = 7
 Quests.IgnoreRaid = 0

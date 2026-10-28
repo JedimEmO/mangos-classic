@@ -30,6 +30,7 @@
 #include "Entities/Corpse.h"
 #include "Tools/Language.h"
 #include "BattleGround/BattleGroundMgr.h"
+#include "Maps/RaidTier.h"
 #include <sstream>
 #include <iomanip>
 
@@ -974,6 +975,10 @@ bool Loot::FillLoot(uint32 loot_id, LootStore const& store, Player* lootOwner, b
     m_lootItems.reserve(MAX_NR_LOOT_ITEMS);
 
     tab->Process(*this, lootOwner, store.IsRatesAllowed()); // Processing is done there, callback via Loot::AddItem()
+
+    // a boss of a raid above tier 1 draws more, before the items are given out below
+    if (&store == &LootTemplates_Creature)
+        RaidTier::AddExtraLoot(*this, *tab, lootOwner, store.IsRatesAllowed());
 
     // fill the loot owners right here so its impossible from this point to change loot result
     Player* masterLooter = nullptr;
@@ -2666,6 +2671,50 @@ void LootTemplate::Process(Loot& loot, Player const* lootOwner, bool rate, LootS
     // Now processing groups
     for (auto const& Group : Groups)
         Group.Process(loot, lootOwner, rate, lootStatsData);
+}
+
+// One more draw, as if the template had one more of its loot sources. The sources are the references it always rolls,
+// weighted by how many times it rolls each, so a boss gets one more item from a pool it already drops from;
+// a template without such references draws from one of its groups that holds no quest items.
+void LootTemplate::ProcessExtraDraw(Loot& loot, Player const* lootOwner, bool rate) const
+{
+    std::vector<std::pair<LootTemplate const*, uint32>> references;
+    uint32 totalWeight = 0;
+    for (auto const& entry : Entries)
+    {
+        if (entry.mincountOrRef >= 0 || entry.chance < 100.0f || entry.maxcount == 0)
+            continue;
+        if (entry.conditionId && lootOwner && !PlayerOrGroupFulfilsCondition(loot, lootOwner, entry.conditionId))
+            continue;
+        if (LootTemplate const* referenced = LootTemplates_Reference.GetLootFor(-entry.mincountOrRef))
+        {
+            references.emplace_back(referenced, entry.maxcount);
+            totalWeight += entry.maxcount;
+        }
+    }
+
+    if (totalWeight)
+    {
+        uint32 pick = urand(0, totalWeight - 1);
+        for (auto const& [referenced, weight] : references)
+        {
+            if (pick < weight)
+            {
+                referenced->Process(loot, lootOwner, rate);
+                return;
+            }
+            pick -= weight;
+        }
+        return;
+    }
+
+    std::vector<LootGroup const*> groups;
+    for (auto const& group : Groups)
+        if (!group.HasQuestDrop())
+            groups.push_back(&group);
+
+    if (!groups.empty())
+        groups[urand(0, uint32(groups.size()) - 1)]->Process(loot, lootOwner, rate);
 }
 
 // True if template includes at least 1 quest drop entry

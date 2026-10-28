@@ -206,6 +206,10 @@ class Map : public GridRefManager<NGridType>
         bool IsMountAllowed() const;
         bool IsDynguidForced() const;
 
+        // The raid tier set when a raid instance is created, before its creatures load; 0 on any other map (Maps/RaidTier.h)
+        uint8 GetRaidTier() const { return m_raidTier; }
+        void SetRaidTier(uint8 tier) { m_raidTier = tier; }
+
         // can't be nullptr for loaded map
         MapPersistentState* GetPersistentState() const { return m_persistentState; }
 
@@ -513,6 +517,8 @@ class Map : public GridRefManager<NGridType>
         std::shared_ptr<CreatureSpellListContainer> m_spellListContainer;
 
         WorldStateVariableManager m_variableManager;
+
+        uint8 m_raidTier = 0;
 
 #ifdef ENABLE_PLAYERBOTS
         std::vector<uint32> m_activeZones;
