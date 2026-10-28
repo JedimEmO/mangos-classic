@@ -373,10 +373,11 @@ struct boss_high_inquisitor_whitemaneAI : public CombatAI
     void DamageTaken(Unit* dealer, uint32& damage, DamageEffectType damageType, SpellEntry const* spellInfo) override
     {
         CombatAI::DamageTaken(dealer, damage, damageType, spellInfo);
-        // Met by players before she reached Mograine, or already fighting when she did: still passive from his fall,
-        // she takes up the fight where she is, so that her Deep Sleep and his resurrection come at half health.
-        if (!m_sleepCast && GetCombatScriptStatus() && m_instance && m_instance->GetData(TYPE_MOGRAINE_AND_WHITE_EVENT) == IN_PROGRESS
-            && m_creature->GetMotionMaster()->GetCurrentMovementGeneratorType() != POINT_MOTION_TYPE)
+        // Not yet asleep-casting nor walking a scripted point, and still passive: she takes up the fight where she is,
+        // whoever comes to her. Players can reach her room through its door, which does not stop movement.
+        if (m_sleepCast || m_creature->GetMotionMaster()->GetCurrentMovementGeneratorType() == POINT_MOTION_TYPE)
+            return;
+        if (GetCombatScriptStatus() || GetReactState() == REACT_PASSIVE)
         {
             SetCombatScriptStatus(false);
             ResetCombatAction(WHITEMANE_ACTION_HEAL, 10000u);
@@ -385,6 +386,9 @@ struct boss_high_inquisitor_whitemaneAI : public CombatAI
             SetMeleeEnabled(true);
             SetReactState(REACT_AGGRESSIVE);
         }
+        // Fought outside the event, with Mograine not lying as dead for her to raise, she can die like any foe.
+        if (!m_instance || m_instance->GetData(TYPE_MOGRAINE_AND_WHITE_EVENT) != IN_PROGRESS)
+            SetDeathPrevention(false);
     }
 
     void EnterEvadeMode() override
