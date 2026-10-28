@@ -47,6 +47,7 @@
 #include "Grids/CellImpl.h"
 #include "Movement/MoveSplineInit.h"
 #include "Entities/CreatureLinkingMgr.h"
+#include "Maps/RaidTier.h"
 #include "Maps/SpawnManager.h"
 
 // apply implementation of the singletons
@@ -1305,7 +1306,7 @@ void Creature::SelectLevel(uint32 forcedLevel /*= USE_DEFAULT_DATABASE_LEVEL*/)
     float intellect = 0.f;
     float spirit = 0.f;
 
-    float damageMod = _GetDamageMod(rank);
+    float damageMod = _GetDamageMod(rank) * RaidTier::DamageMultiplier(this);
     float damageMulti = cinfo->DamageMultiplier * damageMod;
     float damageMultiOLD = cinfo->DamageMultiplierOLD * damageMod;
     bool usedDamageMulti = false;
@@ -1415,6 +1416,7 @@ void Creature::SelectLevel(uint32 forcedLevel /*= USE_DEFAULT_DATABASE_LEVEL*/)
     }
 
     health *= _GetHealthMod(rank); // Apply custom config setting
+    health = uint32(health * RaidTier::HealthMultiplier(this));
     if (health < 1)
         health = 1;
 

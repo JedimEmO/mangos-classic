@@ -57,6 +57,7 @@
 #include "Grids/GridNotifiersImpl.h"
 #include "Grids/CellImpl.h"
 #include "Maps/MapPersistentStateMgr.h"
+#include "Maps/RaidTier.h"
 #include "MotionGenerators/WaypointManager.h"
 #include "GMTickets/GMTicketMgr.h"
 #include "Util/Util.h"
@@ -581,6 +582,13 @@ void World::LoadConfigSettings(bool reload)
     setConfig(CONFIG_UINT32_INSTANCE_UNLOAD_DELAY,    "Instance.UnloadDelay", 30 * MINUTE * IN_MILLISECONDS);
     setConfig(CONFIG_BOOL_DISABLE_INSTANCE_RELOCATE, "Instance.DisableRelocate", false);
 
+    setConfig(CONFIG_BOOL_RAID_TIER_ENABLE, "Raid.Tier.Enable", true);
+    setConfigPos(CONFIG_FLOAT_RAID_TIER_HEALTH_AT_TIER1, "Raid.Tier.HealthAtTier1", 0.40f);
+    setConfigPos(CONFIG_FLOAT_RAID_TIER_DAMAGE_AT_TIER1, "Raid.Tier.DamageAtTier1", 0.60f);
+    setConfigPos(CONFIG_FLOAT_RAID_TIER_STEP_PER_TIER, "Raid.Tier.StepPerTier", 0.15f);
+    setConfigPos(CONFIG_FLOAT_RAID_TIER_EXTRA_LOOT_PER_TIER, "Raid.Tier.ExtraLootPerTier", 0.25f);
+    setConfig(CONFIG_UINT32_RAID_TIER_EXTRA_LOOT_MAX, "Raid.Tier.ExtraLootMax", 3);
+
     setConfigMinMax(CONFIG_UINT32_MAX_PRIMARY_TRADE_SKILL, "MaxPrimaryTradeSkill", 2, 0, 10);
 
     setConfigMinMax(CONFIG_UINT32_TRADE_SKILL_GMIGNORE_MAX_PRIMARY_COUNT, "TradeSkill.GMIgnore.MaxPrimarySkillsCount", SEC_CONSOLE, SEC_PLAYER, SEC_CONSOLE);
@@ -940,6 +948,8 @@ void World::SetInitialWorldSettings()
     sSpellMgr.LoadSkillRaceClassInfoMap();
 
     ///- Clean up and pack instances
+    RaidTier::LoadAtStartup();                              // the raid tiers of instances, renumbered with them
+
     sLog.outString("Packing instances...");
     sMapPersistentStateMgr.PackInstances();
 

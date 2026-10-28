@@ -51,6 +51,7 @@
 #include "Entities/Transports.h"
 #include "Anticheat/Anticheat.hpp"
 #include "Spells/SpellStacking.h"
+#include "Maps/RaidTier.h"
 
 #ifdef BUILD_METRICS
  #include "Metric/Metric.h"
@@ -7052,6 +7053,10 @@ uint32 Unit::SpellDamageBonusDone(Unit* victim, SpellSchoolMask schoolMask, Spel
     if (GetTypeId() == TYPEID_UNIT && !((Creature*)this)->IsPet())
         DoneTotalMod *= Creature::_GetSpellDamageMod(((Creature*)this)->GetCreatureInfo()->Rank);
 
+    // and a raid tier's, for creatures that fight for the raid
+    if (GetTypeId() == TYPEID_UNIT)
+        DoneTotalMod *= RaidTier::DamageMultiplier(static_cast<Creature const*>(this));
+
     AuraList const& mModDamagePercentDone = GetAurasByType(SPELL_AURA_MOD_DAMAGE_PERCENT_DONE);
     for (auto i : mModDamagePercentDone)
     {
@@ -7511,6 +7516,10 @@ uint32 Unit::MeleeDamageBonusDone(Unit* victim, uint32 pdamage, WeaponAttackType
 
         if (attType == OFF_ATTACK)
             DoneTotalMod *= GetModifierValue(UNIT_MOD_DAMAGE_OFFHAND, TOTAL_PCT);                    // no school check required
+
+        // a raid tier's, for creatures that fight for the raid; weapon damage has it from Creature::SelectLevel
+        if (GetTypeId() == TYPEID_UNIT)
+            DoneTotalMod *= RaidTier::DamageMultiplier(static_cast<Creature const*>(this));
     }
 
     // ..done pct (by creature type mask)

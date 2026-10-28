@@ -28,6 +28,7 @@
 #include "Globals/ObjectMgr.h"
 #include "Maps/MapWorkers.h"
 #include "BattleGround/BattleGroundMgr.h"
+#include "Maps/RaidTier.h"
 #include <future>
 
 #define CLASS_LOCK MaNGOS::ClassLevelLockable<MapManager, std::recursive_mutex>
@@ -324,7 +325,7 @@ Map* MapManager::CreateInstance(uint32 id, Player* player)
         map = FindMap(id, NewInstanceId);
         // it is possible that the save exists but the map doesn't
         if (!map)
-            pNewMap = CreateDungeonMap(id, NewInstanceId, pSave);
+            pNewMap = CreateDungeonMap(id, NewInstanceId, pSave, RaidTier::SelectForInstance(entry, NewInstanceId, player, true));
     }
     else
     {
@@ -332,7 +333,7 @@ Map* MapManager::CreateInstance(uint32 id, Player* player)
         // the instance will be created for the first time
         NewInstanceId = GenerateInstanceId();
 
-        pNewMap = CreateDungeonMap(id, NewInstanceId);
+        pNewMap = CreateDungeonMap(id, NewInstanceId, nullptr, RaidTier::SelectForInstance(entry, NewInstanceId, player, false));
     }
 
     // add a new map object into the registry
@@ -347,7 +348,7 @@ Map* MapManager::CreateInstance(uint32 id, Player* player)
     return map;
 }
 
-DungeonMap* MapManager::CreateDungeonMap(uint32 id, uint32 InstanceId, DungeonPersistentState* save)
+DungeonMap* MapManager::CreateDungeonMap(uint32 id, uint32 InstanceId, DungeonPersistentState* save, uint8 raidTier)
 {
     // make sure we have a valid map id
     const MapEntry* entry = sMapStore.LookupEntry(id);
@@ -365,6 +366,7 @@ DungeonMap* MapManager::CreateDungeonMap(uint32 id, uint32 InstanceId, DungeonPe
     DEBUG_LOG("MapInstanced::CreateInstanceMap: %s map instance %d for %d created", save ? "" : "new ", InstanceId, id);
 
     DungeonMap* map = new DungeonMap(id, i_gridCleanUpDelay, InstanceId);
+    map->SetRaidTier(raidTier);                             // before Initialize loads the first creatures
 
     // Dungeons can have saved instance data
     bool load_data = save != nullptr;

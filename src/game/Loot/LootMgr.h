@@ -289,6 +289,8 @@ class LootTemplate
         void AddEntry(LootStoreItem const& item);
         // Rolls for every item in the template and adds the rolled items the the loot
         void Process(Loot& loot, Player const* lootOwner, bool rate, LootStatsData* lootStatsData = nullptr) const;
+        // One more draw from one of the template's loot sources, for the extra loot of raid tiers (Maps/RaidTier.h)
+        void ProcessExtraDraw(Loot& loot, Player const* lootOwner, bool rate) const;
 
         // True if template includes at least 1 quest drop entry
         bool HasQuestDrop(uint8 groupId = 0) const;
