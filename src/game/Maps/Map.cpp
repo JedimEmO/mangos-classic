@@ -898,8 +898,10 @@ void Map::Update(const uint32& t_diff)
             continue;
 
 #ifdef ENABLE_PLAYERBOTS
-        // For non-players only load the grid
-        if (!sPlayerbotAIConfig.disableBotOptimizations && !player->isRealPlayer())
+        // For non-players only load the grid. In a dungeon or battleground, a bot's cells update as a player's do:
+        // a party of bots runs a dungeon alone, and a creature with nothing active near it, such as an escort the
+        // party waits on or a boss it fights in a quiet room, would otherwise never update its AI or movement.
+        if (!sPlayerbotAIConfig.disableBotOptimizations && !player->isRealPlayer() && IsContinent())
         {
             CellPair center = MaNGOS::ComputeCellPair(player->GetPositionX(), player->GetPositionY()).normalize();
             uint32 cell_id = (center.y_coord * TOTAL_NUMBER_OF_CELLS_PER_MAP) + center.x_coord;
