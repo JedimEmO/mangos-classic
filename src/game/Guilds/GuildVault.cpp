@@ -80,6 +80,13 @@ void GuildVault::LoadAtStartup()
         ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin");
 
     CharacterDatabase.DirectExecute(
+        "CREATE TABLE IF NOT EXISTS guildbot_vault_gold ("
+        " guild VARCHAR(255) NOT NULL PRIMARY KEY,"
+        " copper BIGINT UNSIGNED NOT NULL"
+        ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin");
+
+    // item 0 is the gold, with delta in copper
+    CharacterDatabase.DirectExecute(
         "CREATE TABLE IF NOT EXISTS guildbot_vault_log ("
         " id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,"
         " guild VARCHAR(255) NOT NULL,"
@@ -93,6 +100,7 @@ void GuildVault::LoadAtStartup()
 
     std::lock_guard<std::mutex> lock(m_mutex);
     m_vaults.clear();
+    m_gold.clear();
 
     uint32 rows = 0;
     if (auto result = CharacterDatabase.Query("SELECT guild, item, count FROM guildbot_vault WHERE count > 0"))
@@ -111,7 +119,17 @@ void GuildVault::LoadAtStartup()
         while (result->NextRow());
     }
 
-    sLog.outString(">> Loaded %u kinds of items in %u guild vaults", rows, uint32(m_vaults.size()));
+    if (auto result = CharacterDatabase.Query("SELECT guild, copper FROM guildbot_vault_gold WHERE copper > 0"))
+    {
+        do
+        {
+            Field const* fields = result->Fetch();
+            m_gold[fields[0].GetCppString()] = fields[1].GetUInt64();
+        }
+        while (result->NextRow());
+    }
+
+    sLog.outString(">> Loaded %u kinds of items in %u guild vaults, and gold in %u", rows, uint32(m_vaults.size()), uint32(m_gold.size()));
     sLog.outString();
 }
 
@@ -146,6 +164,79 @@ std::vector<std::pair<uint32, uint32>> GuildVault::Contents(std::string const& g
     if (vault != m_vaults.end())
         contents.assign(vault->second.begin(), vault->second.end());
     return contents;
+}
+
+uint64 GuildVault::Gold(std::string const& guild) const
+{
+    std::lock_guard<std::mutex> lock(m_mutex);
+    auto gold = m_gold.find(guild);
+    return gold == m_gold.end() ? 0 : gold->second;
+}
+
+bool GuildVault::DepositGold(Player* player, uint32 copper, std::string& reason)
+{
+    if (!player || !player->IsInWorld())
+        return Refuse(reason, "Only a character in the world can put in the vault.");
+
+    if (!copper)
+        return Refuse(reason, "Nothing was put in.");
+
+    // Below MAX_MONEY_AMOUNT, so the change stays inside a signed 32-bit delta
+    if (copper > uint32(MAX_MONEY_AMOUNT) || player->GetMoney() < copper)
+        return Refuse(reason, "You do not have that much gold.");
+
+    std::string const guild = GuildOf(player->GetSession()->GetAccountId());
+    if (guild.empty())
+        return Refuse(reason, MSG_NO_VAULT);
+
+    std::lock_guard<std::mutex> lock(m_mutex);
+
+    uint64& held = m_gold[guild];
+    held += copper;
+    player->ModifyMoney(-int32(copper));
+
+    SaveGold(player, guild, held, int32(copper));
+    DETAIL_LOG("Guild vault: %s (guid %u) put %u copper in the vault of guild %s, " UI64FMTD " held",
+               player->GetName(), player->GetGUIDLow(), copper, guild.c_str(), held);
+    return true;
+}
+
+uint32 GuildVault::WithdrawGold(Player* player, uint32 copper, std::string& reason)
+{
+    if (!player || !player->IsInWorld())
+        return GiveNone(reason, "Only a character in the world can take from the vault.");
+
+    if (!copper)
+        return GiveNone(reason, "Nothing was asked for.");
+
+    std::string const guild = GuildOf(player->GetSession()->GetAccountId());
+    if (guild.empty())
+        return GiveNone(reason, MSG_NO_VAULT);
+
+    // Held from reading the balance until the change is queued, as for items
+    std::lock_guard<std::mutex> lock(m_mutex);
+
+    auto gold = m_gold.find(guild);
+    if (gold == m_gold.end() || !gold->second)
+        return GiveNone(reason, "The vault holds no gold.");
+
+    uint32 const money = player->GetMoney();
+    uint32 const room = money < uint32(MAX_MONEY_AMOUNT) ? uint32(MAX_MONEY_AMOUNT) - money : 0;
+    if (!room)
+        return GiveNone(reason, "You cannot carry more gold.");
+
+    uint32 const taken = uint32(std::min<uint64>(std::min(copper, room), gold->second));
+    uint64 const left = gold->second - taken;
+    player->ModifyMoney(int32(taken));
+    if (left)
+        gold->second = left;
+    else
+        m_gold.erase(gold);
+
+    SaveGold(player, guild, left, -int32(taken));
+    DETAIL_LOG("Guild vault: %s (guid %u) took %u copper from the vault of guild %s, " UI64FMTD " left",
+               player->GetName(), player->GetGUIDLow(), taken, guild.c_str(), left);
+    return taken;
 }
 
 bool GuildVault::IsFungible(Item const* item, std::string& reason)
@@ -339,6 +430,26 @@ void GuildVault::Save(Player* player, std::string const& guild, uint32 item, uin
         CharacterDatabase.PExecute("DELETE FROM guildbot_vault WHERE guild = '%s' AND item = '%u'", guildKey.c_str(), item);
     CharacterDatabase.PExecute("INSERT INTO guildbot_vault_log (guild, guid, name, item, delta) VALUES ('%s', '%u', '%s', '%u', '%d')",
                                guildKey.c_str(), player->GetGUIDLow(), name.c_str(), item, delta);
+    CharacterDatabase.CommitTransaction();
+}
+
+void GuildVault::SaveGold(Player* player, std::string const& guild, uint64 newCopper, int32 delta) const
+{
+    std::string guildKey = guild;
+    std::string name = player->GetName();
+    CharacterDatabase.escape_string(guildKey);
+    CharacterDatabase.escape_string(name);
+
+    // As Save: queued under the vault's mutex, after any save of the player queued before it
+    CharacterDatabase.BeginTransaction();
+    player->SaveInventoryAndGoldToDB();
+    if (newCopper)
+        CharacterDatabase.PExecute("REPLACE INTO guildbot_vault_gold (guild, copper) VALUES ('%s', '" UI64FMTD "')",
+                                   guildKey.c_str(), newCopper);
+    else
+        CharacterDatabase.PExecute("DELETE FROM guildbot_vault_gold WHERE guild = '%s'", guildKey.c_str());
+    CharacterDatabase.PExecute("INSERT INTO guildbot_vault_log (guild, guid, name, item, delta) VALUES ('%s', '%u', '%s', '0', '%d')",
+                               guildKey.c_str(), player->GetGUIDLow(), name.c_str(), delta);
     CharacterDatabase.CommitTransaction();
 }
 

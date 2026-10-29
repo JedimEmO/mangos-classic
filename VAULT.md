@@ -3,7 +3,9 @@
 Each guild of the competition keeps a stockpile in one vault,
 kept by a Steamwheedle Vaultkeeper beside the Guild Master in every capital.
 It is the same vault at each, as a bank is.
-Players use it as a vendor's window, every price 0; the bot engine uses the same functions through its `kit` and `deposit` jobs.
+It holds items and the guild's gold.
+Players use it as a vendor's window, every price 0, and through the vaultkeeper's gossip for gold;
+the bot engine uses the same functions through its `kit`, `deposit`, `withdraw` and `pay` jobs.
 `docs/competition.md` in the main repository has the design.
 
 The vault is `src/game/Guilds/GuildVault.h` and `.cpp`, the singleton `sGuildVault`.
@@ -43,6 +45,20 @@ The 1.12 client keeps a vendor's list in an array of 128 entries and does not ch
 so the core's `MAX_VENDOR_ITEMS` of 128 is also the client's limit.
 A new kind past that is refused with "The vault holds as many kinds of items as it can."
 
+## Gold
+
+The vault holds one balance of copper per guild, with no limit but a 64-bit count.
+A character puts in what it carries, and takes out as much as the vault holds and its purse takes;
+a character carries at most `MAX_MONEY_AMOUNT`, 2147483646 copper, about 214748 gold.
+So one deposit or withdrawal is at most that much, and the log's 32-bit `delta` holds it.
+
+A player uses the vaultkeeper's gossip.
+"Put gold in the vault." and "Take gold from the vault. It holds 12g 50s." are code-box options:
+the player types an amount, and the vaultkeeper answers with a notice and the menu again, with the new balance.
+The 1.12 client's code box shows no message of its own, so the deposit option says what to type.
+An amount is a number of gold, coins with units such as `12g 50s` or `3s 20c`, or `all`.
+The take option shows only while the vault holds some gold.
+
 ## The API
 
 All of it is in `GuildVault.h`, and every function may be called from any map thread.
@@ -59,6 +75,10 @@ static bool IsFungible(Item const* item, std::string& reason);
 
 uint32 Withdraw(Player* player, uint32 item, uint32 count, std::string& reason, InventoryResult* bagError = nullptr);
 bool Deposit(Player* player, Item* item, uint32 count, std::string& reason);
+
+uint64 Gold(std::string const& guild) const;
+bool DepositGold(Player* player, uint32 copper, std::string& reason);
+uint32 WithdrawGold(Player* player, uint32 copper, std::string& reason);
 ```
 
 `GuildOf` is empty for an account with no guild.
@@ -73,6 +93,11 @@ The player gets the item as from a vendor, with the "You receive" message.
 `Deposit` puts `count` of the item in the vault, or the whole stack when `count` is 0.
 It checks the owner, where the item is, `IsFungible`, the guild and the room in the vault, and false comes with a reason.
 On success the item may be destroyed, so the caller must not use the pointer again.
+
+`Gold` is the guild's balance in copper.
+`DepositGold` puts exactly `copper` of the player's gold in, and refuses with a reason when the player has less.
+`WithdrawGold` takes up to `copper`, as much as the vault holds and the purse takes, and returns how much;
+none comes with a reason, such as "The vault holds no gold."
 
 The player must be in the world and handled by the calling thread, as for any change to a player's inventory.
 
@@ -113,6 +138,7 @@ the player's inventory and gold, the vault's new count of the item (or the row d
 The queue is one thread that writes in order, and changes are queued while the mutex is held,
 so the database gets them in the order memory had them, each after any save of the player queued before it.
 Each writes the item's absolute count, so a later change of the item mends a row that an earlier failure left wrong.
+Gold works the same way: the player's gold, the guild's new balance (or the row deleted at 0), and a log line with item 0.
 
 What a crash or a failed transaction costs is the same as for a trade.
 A crash before the queue writes loses the change on both sides together.
@@ -122,12 +148,13 @@ The log has an SQL error for it.
 
 ## Tables
 
-The core creates both in the characters database at startup if they are missing, with a binary collation,
+The core creates all three in the characters database at startup if they are missing, with a binary collation,
 so guild keys compare exactly as they do in memory. The guild service reads them; only the core writes.
 
 ```sql
 guildbot_vault (guild VARCHAR(255) NOT NULL, item INT UNSIGNED NOT NULL, count INT UNSIGNED NOT NULL,
                 PRIMARY KEY (guild, item))
+guildbot_vault_gold (guild VARCHAR(255) NOT NULL PRIMARY KEY, copper BIGINT UNSIGNED NOT NULL)
 guildbot_vault_log (id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY, guild VARCHAR(255) NOT NULL,
                     at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, guid INT UNSIGNED NOT NULL,
                     name VARCHAR(12) NOT NULL, item INT UNSIGNED NOT NULL, delta INT NOT NULL, KEY (guild, at))
@@ -135,7 +162,9 @@ guildbot_vault_log (id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY, guild VARCHAR
 
 `guildbot_vault` has a row per item a vault holds, never one at 0.
 It is read once, at startup; a row changed by hand while the server runs is overwritten by the next change of that item.
-`guildbot_vault_log` has a line per change, the character's guid and name, and `delta` positive for a deposit.
+`guildbot_vault_gold` has a row per guild with gold in its vault, read once at startup as the items are.
+`guildbot_vault_log` has a line per change, the character's guid and name, and `delta` positive for a deposit;
+item 0 is gold, its `delta` in copper.
 
 ## Testing it
 
@@ -157,4 +186,9 @@ With the core and `031-vault.sql` deployed, and the guild service running or not
 7. Fill the bags and buy the last one: the bags-full error, and the vault still has 1.
 8. With the second character at the Orgrimmar vaultkeeper, or the same one in Ironforge: the same vault.
 9. Take the last potion with one character while the other has the window open, then buy with the other: sold out, and the list without it.
-10. Restart mangosd: the log shows `Loaded N kinds of items in M guild vaults`, and the vault is as it was.
+10. With the first character and some gold, choose "Put gold in the vault." and type `1g 50s`:
+    the notice says it holds 1g 50s, the purse is 1g 50s lighter, `guildbot_vault_gold` has `('vault-test', 15000)`
+    and the log a line with item 0 and delta 15000. Type `lots`: asked for an amount, nothing moves.
+11. With the second, "Take gold from the vault. It holds 1g 50s.", type `all`: 1g 50s in its purse, the row gone,
+    and the take option gone from the menu.
+12. Restart mangosd: the log shows `Loaded N kinds of items in M guild vaults, and gold in K`, and the vault is as it was.

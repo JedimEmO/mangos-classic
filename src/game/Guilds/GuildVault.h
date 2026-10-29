@@ -45,6 +45,9 @@ class Player;
  * charges, not conjured or expiring, not wrapped, written on or holding loot, and no bag with anything in it.
  * It holds at most MAX_KINDS different items, what the vendor window can show.
  *
+ * The vault also holds the guild's gold, as one balance of copper. A character puts in or takes out what it carries:
+ * a player through the vaultkeeper's gossip, a bot through the engine's jobs.
+ *
  * The vault in memory is the truth: it is loaded at startup and changed under one mutex. Each deposit and withdrawal
  * changes the player's inventory and the vault in memory, then queues one transaction on the characters database's
  * write queue that saves the player's inventory, writes the vault's new count of that item and logs the change.
@@ -62,7 +65,8 @@ class GuildVault
 
         static GuildVault& Instance();
 
-        // Creates guildbot_vault and guildbot_vault_log in the characters database if they are missing, and loads the vaults.
+        // Creates guildbot_vault, guildbot_vault_gold and guildbot_vault_log in the characters database if they are missing,
+        // and loads the vaults.
         void LoadAtStartup();
 
         static bool IsVaultkeeper(Creature const* creature);
@@ -75,6 +79,17 @@ class GuildVault
 
         // Everything in the guild's vault as (item entry, count), by entry.
         std::vector<std::pair<uint32, uint32>> Contents(std::string const& guild) const;
+
+        // How much gold the guild's vault holds, in copper.
+        uint64 Gold(std::string const& guild) const;
+
+        // Puts copper of the player's gold in the vault of the player's guild; false with a reason when the player has
+        // less or the guild no vault.
+        bool DepositGold(Player* player, uint32 copper, std::string& reason);
+
+        // Takes up to copper from the vault of the player's guild into the player's purse, as much as the vault holds
+        // and the purse takes; returns how much, 0 with a reason when none.
+        uint32 WithdrawGold(Player* player, uint32 copper, std::string& reason);
 
         // Whether the item could go in a vault, by its kind and state alone; reason says why not.
         // Deposit checks this and more (the owner, where the item is, the guild and the room in the vault).
@@ -102,9 +117,12 @@ class GuildVault
 
         // Queues the transaction of one change: the player's inventory, the vault's count of the item, the log
         void Save(Player* player, std::string const& guild, uint32 item, uint32 newCount, int32 delta) const;
+        // The same for the gold: the player's gold, the vault's balance, the log with item 0
+        void SaveGold(Player* player, std::string const& guild, uint64 newCopper, int32 delta) const;
 
         mutable std::mutex m_mutex;
         std::map<std::string, Stock> m_vaults;              // by guildd's guild key
+        std::map<std::string, uint64> m_gold;               // copper, by guildd's guild key
         std::map<uint32, std::vector<uint32>> m_shown;      // the list last sent to a player, by guid low
 };
 
