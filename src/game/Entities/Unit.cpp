@@ -46,6 +46,7 @@
 #include "MotionGenerators/MovementGenerator.h"
 #include "Movement/MoveSplineInit.h"
 #include "Movement/MoveSpline.h"
+#include "Movement/LaunchGuard.h"
 #include "Entities/CreatureLinkingMgr.h"
 #include "Tools/Formulas.h"
 #include "Entities/Transports.h"
@@ -10623,6 +10624,16 @@ void Unit::NearTeleportTo(float x, float y, float z, float orientation, bool cas
 {
     if (IsPlayer())
     {
+        // The same guard as a launched spline's sees a player's near teleport, as Blink's or a follow's unstuck jump.
+        if (Movement::LaunchGuardFn guard = Movement::GetLaunchGuard())
+        {
+            Movement::PointsArray path = { G3D::Vector3(GetPositionX(), GetPositionY(), GetPositionZ()), G3D::Vector3(x, y, z) };
+            if (!guard(*this, path, Movement::LaunchKind::Teleport))
+            {
+                GetMotionMaster()->Refused();
+                return;
+            }
+        }
         uint32 options = (transportLeave ? 0 : TELE_TO_NOT_LEAVE_TRANSPORT) | (casting ? TELE_TO_SPELL : 0);
         if (GetDistance(x, y, z, DIST_CALC_NONE) < 100.f * 100.f)
             options |= TELE_TO_NOT_LEAVE_COMBAT;

@@ -120,6 +120,18 @@ class MotionMaster : private std::stack<MovementGenerator*>
         // Pushes a generator of the caller's own, as the Move* functions push theirs; for tests of the stack.
         void MoveGenerator(MovementGenerator* m) { Mutate(m); }
 
+        // A module's launch guard (Movement/LaunchGuard.h) refused a spline or a near teleport. The generator this motion
+        // master was calling then, in its Initialize, Update or Reset, is removed by identity once the call returns: never
+        // pushed, from Initialize; finalized and deleted, from Update or Reset, and what it uncovers reset, which a buried
+        // generator relaunching into the same refusal is removed by in turn. With no generator being called, as for a spell's
+        // teleport, nothing is removed.
+        void Refused();
+        // The generator being called now, or none; for the guard, to name what it refuses.
+        MovementGenerator const* GetCalling() const { return m_calling; }
+        // A generator by identity, taken out of the stack wherever it is, as RemoveMove does by id, and the spline of one on
+        // top stopped. Not during the owner's own motion update, which returns Deferred and removes nothing.
+        RemoveResult RemoveGenerator(MovementGenerator const* m);
+
         using Impl::top;
         using Impl::empty;
 
@@ -213,6 +225,22 @@ class MotionMaster : private std::stack<MovementGenerator*>
         void ErasePending(uint32 id);
         // Deletes a generator taken out of the stack, and forgets it as the one owed a reset.
         void Discard(MovementGenerator* m);
+
+        // Calls a generator's Initialize, Update or Reset with it known as the one being called; whether the guard refused it.
+        template<typename Call> bool CallGuarded(MovementGenerator* m, Call call)
+        {
+            MovementGenerator* previous = m_calling;
+            m_calling = m;
+            call();
+            m_calling = previous;
+            const bool refused = m_refused == m;
+            if (refused)
+                m_refused = nullptr;
+            return refused;
+        }
+
+        MovementGenerator* m_calling = nullptr;
+        MovementGenerator* m_refused = nullptr;
 
         std::vector<uint32> m_pendingRemovals;
         // The generator a delayed expiry or clean uncovered during an update, owed its reset at the update's end, unless a

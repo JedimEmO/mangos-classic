@@ -127,13 +127,17 @@ void MotionMaster::UpdateMotion(uint32 diff)
     MANGOS_ASSERT(!empty());
     MovementGenerator* updating = top();
     m_cleanFlag |= MMCF_UPDATE;
-    const bool alive = updating->Update(*m_owner, diff);
+    bool alive = true;
+    const bool refused = CallGuarded(updating, [&]() { alive = updating->Update(*m_owner, diff); });
     m_cleanFlag &= ~MMCF_UPDATE;
 
     // Moves queued for removal during the update go first, before anything can uncover and reset them. Only the generator
     // that returned false is expired, and only while it is still on top: a removal may have taken it, or a Finalize pushed
     // something above it, and expiring the top then would take a chase or a new move instead.
-    const bool removed = !m_pendingRemovals.empty() && ApplyPendingRemovals(updating);
+    bool removed = !m_pendingRemovals.empty() && ApplyPendingRemovals(updating);
+    // A generator whose relaunch the guard refused goes, wherever it is now.
+    if (refused && !removed && RemoveGenerator(updating) == RemoveResult::Removed)
+        removed = true;
     if (!alive && !removed && !empty() && top() == updating)
         MovementExpired();
 
@@ -207,8 +211,52 @@ void MotionMaster::ResetTop()
     {
         if (top() == m_awaitingReset)
             m_awaitingReset = nullptr;
-        top()->Reset(*m_owner);
+        MovementGenerator* resetting = top();
+        // Uncovered and relaunched into the guard's refusal, as a buried chase: removed, and the next one down reset.
+        if (CallGuarded(resetting, [&]() { resetting->Reset(*m_owner); }) && !(m_cleanFlag & MMCF_UPDATE))
+            RemoveGenerator(resetting);
     }
+}
+
+void MotionMaster::Refused()
+{
+    if (m_calling && !isStatic(m_calling))
+        m_refused = m_calling;
+}
+
+MotionMaster::RemoveResult MotionMaster::RemoveGenerator(MovementGenerator const* gen)
+{
+    if (!gen || isStatic(const_cast<MovementGenerator*>(gen)))
+        return RemoveResult::NotFound;
+    auto it = std::find(Impl::c.begin(), Impl::c.end(), gen);
+    if (it == Impl::c.end())
+        return RemoveResult::NotFound;
+    if (m_cleanFlag & MMCF_UPDATE)
+        return RemoveResult::Deferred;
+
+    MovementGenerator* m = *it;
+    if (m == top())
+    {
+        pop();
+        MovementGenerator* nowTop = empty() ? nullptr : top();
+        // It may push another move, through MovementInform.
+        m->Finalize(*m_owner);
+        Discard(m);
+        // A chase's or a follow's Finalize leaves its spline running.
+        if (!m_owner->movespline->Finalized())
+            m_owner->InterruptMoving();
+        if (empty())
+            Initialize();
+        else if (top() == nowTop)
+            ResetTop();
+        PrunePending();
+        return RemoveResult::Removed;
+    }
+
+    Impl::c.erase(it);
+    Discard(m);
+    PrunePending();
+    return RemoveResult::Removed;
 }
 
 bool MotionMaster::HasPendingRemoval(uint32 id) const
@@ -749,7 +797,18 @@ void MotionMaster::Mutate(MovementGenerator* m)
             top()->Interrupt(*m_owner);
     }
 
-    m->Initialize(*m_owner);
+    // Refused by the guard as it launched: never pushed. What it interrupted goes on, reset, unless this is the owner's own
+    // motion update, whose generator goes on from its update as it would after any interrupt.
+    if (CallGuarded(m, [&]() { m->Initialize(*m_owner); }))
+    {
+        m->Finalize(*m_owner);
+        Discard(m);
+        if (empty())
+            Initialize();
+        else if (!(m_cleanFlag & MMCF_UPDATE))
+            ResetTop();
+        return;
+    }
     push(m);
 }
 

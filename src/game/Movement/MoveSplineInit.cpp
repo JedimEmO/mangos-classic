@@ -21,6 +21,8 @@
 #include "packet_builder.h"
 #include "Entities/Unit.h"
 #include "Entities/Transports.h"
+#include "Movement/LaunchGuard.h"
+#include "MotionGenerators/MotionMaster.h"
 
 namespace Movement
 {
@@ -73,6 +75,16 @@ namespace Movement
 
         // corrent first vertex
         args.path[0] = real_position;
+
+        // A module's guard sees the final path of every player's move, whichever generator or effect launches it. A refusal
+        // launches nothing and has the generator that asked for it removed.
+        if (unit.IsPlayer())
+            if (LaunchGuardFn guard = GetLaunchGuard())
+                if (!guard(unit, args.path, LaunchKind::Spline))
+                {
+                    unit.GetMotionMaster()->Refused();
+                    return 0;
+                }
         args.flags.enter_cycle = args.flags.cyclic;
         uint32 moveFlags = unit.m_movementInfo.GetMovementFlags();
         if (args.flags.runmode)

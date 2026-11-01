@@ -131,6 +131,8 @@ namespace Movement
             const Vector3 CurrentDestination() const { return Initialized() ? spline.getPoint(point_Idx + 1) : Vector3();}
             int32 currentPathIdx() const;
             int32 GetRawPathIndex() const { return point_Idx; }
+            // The spline's points, for a module's guard to read where a move still goes: from GetRawPathIndex() + 1 on.
+            const MySpline::ControlArray& GetPathPoints() const { return spline.getPoints(); }
 
             uint32 Duration() const { return spline.length();}
             int32 ComputeTimeToIndex(uint32 idx) const { return spline.length(idx) - time_passed; }
