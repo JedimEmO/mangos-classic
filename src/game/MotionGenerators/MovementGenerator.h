@@ -59,6 +59,9 @@ class MovementGenerator
 
         virtual bool IsRemovedOnExpire() const { return false; }
 
+        // The id a caller gave this move, for MotionMaster::RemoveMove; 0 for none. A point move keeps its id.
+        virtual uint32 GetMoveId() const { return 0; }
+
         // used for check from Update call is movegen still be active (top movement generator)
         // after some not safe for this calls
         bool IsActive(Unit& u);

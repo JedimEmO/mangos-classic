@@ -39,6 +39,7 @@ class PointMovementGenerator : public MovementGenerator
         void UnitSpeedChanged() override { m_speedChanged = true; }
 
         MovementGeneratorType GetMovementGeneratorType() const override { return POINT_MOTION_TYPE; }
+        uint32 GetMoveId() const override { return m_id; }
 
     protected:
         virtual void Move(Unit& unit);

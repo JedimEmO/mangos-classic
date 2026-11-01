@@ -125,36 +125,159 @@ void MotionMaster::UpdateMotion(uint32 diff)
 #endif
 
     MANGOS_ASSERT(!empty());
+    MovementGenerator* updating = top();
     m_cleanFlag |= MMCF_UPDATE;
+    const bool alive = updating->Update(*m_owner, diff);
+    m_cleanFlag &= ~MMCF_UPDATE;
 
-    if (!top()->Update(*m_owner, diff))
-    {
-        m_cleanFlag &= ~MMCF_UPDATE;
+    // Moves queued for removal during the update go first, before anything can uncover and reset them. Only the generator
+    // that returned false is expired, and only while it is still on top: a removal may have taken it, or a Finalize pushed
+    // something above it, and expiring the top then would take a chase or a new move instead.
+    const bool removed = !m_pendingRemovals.empty() && ApplyPendingRemovals(updating);
+    if (!alive && !removed && !empty() && top() == updating)
         MovementExpired();
-    }
-    else
-        m_cleanFlag &= ~MMCF_UPDATE;
 
     if (m_expList)
     {
         for (auto mg : *m_expList)
-        {
-            if (!isStatic(mg))
-                delete mg;
-        }
+            Discard(mg);
 
         delete m_expList;
         m_expList = nullptr;
+
+        PrunePending();
 
         if (empty())
             Initialize();
 
         if (m_cleanFlag & MMCF_RESET)
         {
-            top()->Reset(*m_owner);
             m_cleanFlag &= ~MMCF_RESET;
+            // Only the generator the delayed expiry or clean uncovered, and only while it is still on top and nothing reset
+            // it since: never a move a Finalize pushed meanwhile, and never twice.
+            MovementGenerator* owed = m_awaitingReset;
+            m_awaitingReset = nullptr;
+            if (owed && !empty() && top() == owed)
+                ResetTop();
         }
     }
+    m_awaitingReset = nullptr;
+}
+
+bool MotionMaster::IsPending(MovementGenerator const* m) const
+{
+    const uint32 id = m->GetMoveId();
+    return id && std::find(m_pendingRemovals.begin(), m_pendingRemovals.end(), id) != m_pendingRemovals.end();
+}
+
+void MotionMaster::ErasePending(uint32 id)
+{
+    m_pendingRemovals.erase(std::remove(m_pendingRemovals.begin(), m_pendingRemovals.end(), id), m_pendingRemovals.end());
+}
+
+void MotionMaster::Discard(MovementGenerator* m)
+{
+    if (m == m_awaitingReset)
+        m_awaitingReset = nullptr;
+    if (!isStatic(m))
+        delete m;
+}
+
+void MotionMaster::PrunePending()
+{
+    m_pendingRemovals.erase(std::remove_if(m_pendingRemovals.begin(), m_pendingRemovals.end(), [this](uint32 id) { return !HasMove(id); }),
+        m_pendingRemovals.end());
+}
+
+void MotionMaster::ResetTop()
+{
+    // A queued move uncovered here was covered until now, so its Interrupt stopped it: it goes without a Finalize, which
+    // would stop the spline of whatever runs, and without being reset.
+    while (!empty() && IsPending(top()))
+    {
+        MovementGenerator* m = top();
+        pop();
+        ErasePending(m->GetMoveId());
+        Discard(m);
+    }
+    PrunePending();
+    if (empty())
+        Initialize();
+    else
+    {
+        if (top() == m_awaitingReset)
+            m_awaitingReset = nullptr;
+        top()->Reset(*m_owner);
+    }
+}
+
+bool MotionMaster::HasPendingRemoval(uint32 id) const
+{
+    return std::find(m_pendingRemovals.begin(), m_pendingRemovals.end(), id) != m_pendingRemovals.end();
+}
+
+bool MotionMaster::HasMove(uint32 id) const
+{
+    return id && std::any_of(Impl::c.begin(), Impl::c.end(), [id](MovementGenerator const* m) { return m->GetMoveId() == id; });
+}
+
+MotionMaster::RemoveResult MotionMaster::RemoveMove(uint32 id)
+{
+    if (!id)
+        return RemoveResult::NotFound;
+    auto it = std::find_if(Impl::c.begin(), Impl::c.end(), [id](MovementGenerator const* m) { return m->GetMoveId() == id; });
+    if (it == Impl::c.end())
+        return RemoveResult::NotFound;
+    if (m_cleanFlag & MMCF_UPDATE)
+    {
+        if (std::find(m_pendingRemovals.begin(), m_pendingRemovals.end(), id) == m_pendingRemovals.end())
+            m_pendingRemovals.push_back(id);
+        return RemoveResult::Deferred;
+    }
+
+    MovementGenerator* m = *it;
+    ErasePending(id);
+    if (m == top())
+    {
+        pop();
+        MovementGenerator* nowTop = empty() ? nullptr : top();
+        // It may push another move, through MovementInform.
+        m->Finalize(*m_owner);
+        Discard(m);
+        if (empty())
+            Initialize();
+        else if (top() == nowTop)
+            ResetTop();
+        PrunePending();
+        return RemoveResult::Removed;
+    }
+
+    Impl::c.erase(it);
+    Discard(m);
+    PrunePending();
+    return RemoveResult::Removed;
+}
+
+bool MotionMaster::ApplyPendingRemovals(MovementGenerator const* watched)
+{
+    // One at a time from the queue itself, so that while the first is removed the rest are still known to be pending,
+    // and none of them is reset when a removal uncovers it.
+    bool removedWatched = false;
+    while (!m_pendingRemovals.empty())
+    {
+        const uint32 id = m_pendingRemovals.front();
+        auto it = std::find_if(Impl::c.begin(), Impl::c.end(), [id](MovementGenerator const* m) { return m->GetMoveId() == id; });
+        if (it == Impl::c.end())
+        {
+            ErasePending(id);
+            continue;
+        }
+        if (*it == watched)
+            removedWatched = true;
+        if (RemoveMove(id) != RemoveResult::Removed)
+            ErasePending(id);
+    }
+    return removedWatched;
 }
 
 void MotionMaster::DirectClean(bool reset, bool all)
@@ -164,15 +287,14 @@ void MotionMaster::DirectClean(bool reset, bool all)
         MovementGenerator* curr = top();
         pop();
         curr->Finalize(*m_owner);
-
-        if (!isStatic(curr))
-            delete curr;
+        Discard(curr);
     }
 
+    PrunePending();
     if (!all && reset)
     {
         MANGOS_ASSERT(!empty());
-        top()->Reset(*m_owner);
+        ResetTop();
     }
 }
 
@@ -198,6 +320,8 @@ void MotionMaster::DelayedClean(bool reset, bool all)
         if (!isStatic(curr))
             m_expList->push_back(curr);
     }
+    if (reset)
+        m_awaitingReset = empty() ? nullptr : top();
 }
 
 void MotionMaster::DirectExpire(bool reset)
@@ -219,7 +343,7 @@ void MotionMaster::DirectExpire(bool reset)
             MovementGenerator* temp = top();
             pop();
             temp->Finalize(*m_owner);
-            delete temp;
+            Discard(temp);
         }
     }
 
@@ -227,16 +351,15 @@ void MotionMaster::DirectExpire(bool reset)
     MovementGenerator* nowTop = empty() ? nullptr : top();
     // it can add another motions instead
     curr->Finalize(*m_owner);
-
-    if (!isStatic(curr))
-        delete curr;
+    Discard(curr);
 
     if (empty())
         Initialize();
 
+    PrunePending();
     // Prevent reseting possible new pushed MMGen
     if (reset && top() == nowTop)
-        top()->Reset(*m_owner);
+        ResetTop();
 }
 
 void MotionMaster::DelayedExpire(bool reset)
@@ -263,6 +386,10 @@ void MotionMaster::DelayedExpire(bool reset)
         temp ->Finalize(*m_owner);
         m_expList->push_back(temp);
     }
+
+    // What this expiry uncovers is owed the reset, not a move the Finalize below may push.
+    if (reset)
+        m_awaitingReset = empty() ? nullptr : top();
 
     curr->Finalize(*m_owner);
 

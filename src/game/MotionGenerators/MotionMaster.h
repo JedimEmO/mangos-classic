@@ -108,6 +108,18 @@ class MotionMaster : private std::stack<MovementGenerator*>
 
         MovementGenerator const* GetCurrent() const { return top(); }
 
+        // A move by its id (MovementGenerator::GetMoveId), taken out of the stack wherever it is, and nothing else with it.
+        // On top: finalized and deleted, and what is then on top reset, unless the Finalize pushed something new. Beneath:
+        // deleted with no Finalize and no Reset, the move on top and its spline untouched, since its Interrupt stopped it
+        // when it was covered. During the owner's own motion update it is queued instead, and the queue is applied before
+        // anything can uncover and reset a queued move. Id 0 is never a move.
+        enum class RemoveResult { Removed, NotFound, Deferred };
+        RemoveResult RemoveMove(uint32 id);
+        bool HasMove(uint32 id) const;
+        bool HasPendingRemoval(uint32 id) const;
+        // Pushes a generator of the caller's own, as the Move* functions push theirs; for tests of the stack.
+        void MoveGenerator(MovementGenerator* m) { Mutate(m); }
+
         using Impl::top;
         using Impl::empty;
 
@@ -187,6 +199,23 @@ class MotionMaster : private std::stack<MovementGenerator*>
 
         void DirectExpire(bool reset);
         void DelayedExpire(bool reset);
+
+        // The queued removals, applied after the top's update; true when they removed the given generator.
+        bool ApplyPendingRemovals(MovementGenerator const* watched);
+        // Resets the top, first removing any queued move that would be uncovered and reset.
+        void ResetTop();
+        bool IsPending(MovementGenerator const* m) const;
+        // Drops the queued ids no longer in the stack.
+        void PrunePending();
+        // Drops one queued id.
+        void ErasePending(uint32 id);
+        // Deletes a generator taken out of the stack, and forgets it as the one owed a reset.
+        void Discard(MovementGenerator* m);
+
+        std::vector<uint32> m_pendingRemovals;
+        // The generator a delayed expiry or clean uncovered during an update, owed its reset at the update's end, unless a
+        // removal reset it meanwhile, it was deleted, or something else came on top.
+        MovementGenerator* m_awaitingReset = nullptr;
 
         Unit*       m_owner;
         ExpireList* m_expList;
