@@ -301,6 +301,29 @@ bool FixedPathMovementGenerator::Move(Unit& unit) const
     return bool(init.Launch());
 }
 
+void IdPathMovementGenerator::Interrupt(Unit& unit)
+{
+    m_covered = true;
+    FixedPathMovementGenerator::Interrupt(unit);
+}
+
+void IdPathMovementGenerator::Reset(Unit& unit)
+{
+    // Uncovered after another generator: not walked on from here, since the way from here was never checked.
+    if (!m_covered)
+        FixedPathMovementGenerator::Reset(unit);
+}
+
+bool IdPathMovementGenerator::Update(Unit& unit, const uint32& diff)
+{
+    if (m_covered)
+        return false;
+    // A spline that is not this walk's, finished or not: stopped or replaced by something else, so the walk is over.
+    if (!m_spline.empty() && unit.movespline->FinalDestination() != m_spline.back())
+        return false;
+    return FixedPathMovementGenerator::Update(unit, diff);
+}
+
 void FixedPathMovementGenerator::AddToPathPauseTime(int32 waitTimeDiff, bool force)
 {
     if (force)

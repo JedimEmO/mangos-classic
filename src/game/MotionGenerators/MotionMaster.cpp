@@ -565,6 +565,13 @@ void MotionMaster::MovePath(std::vector<G3D::Vector3>& path, float o, ForcedMove
     Mutate(new FixedPathMovementGenerator(path, o, forcedMovement, flying, 0.0f, 0, cyclic));
 }
 
+void MotionMaster::MovePath(uint32 id, std::vector<G3D::Vector3>& path, ForcedMovement forcedMovement)
+{
+    if (path.empty())
+        return;
+    Mutate(new IdPathMovementGenerator(path, id, forcedMovement));
+}
+
 void MotionMaster::MovePath(int32 pathId, WaypointPathOrigin wpOrigin /*= PATH_NO_PATH*/, ForcedMovement forcedMovement, bool flying, float speed, bool cyclic, ObjectGuid guid/* = ObjectGuid()*/)
 {
     m_currentPathId = pathId;

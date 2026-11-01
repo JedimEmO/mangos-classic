@@ -87,6 +87,26 @@ class FixedPathMovementGenerator : public AbstractPathMovementGenerator
         uint32 m_forcedMovement;
 };
 
+// A walk along points the caller checked, with an id of its own (GetMoveId), never cyclic. It walks those points and
+// nothing else: once covered by another generator, or its spline stopped or replaced by something else, it ends rather
+// than going on from wherever the owner then stands, and its caller plans the rest again.
+class IdPathMovementGenerator : public FixedPathMovementGenerator
+{
+    public:
+        IdPathMovementGenerator(const Movement::PointsArray& path, uint32 id, uint32 forcedMovement) :
+            FixedPathMovementGenerator(path, std::nullopt, forcedMovement, false, 0.0f, 0, false), m_id(id) {}
+
+        void Interrupt(Unit& unit) override;
+        void Reset(Unit& unit) override;
+        bool Update(Unit& unit, const uint32& diff) override;
+
+        uint32 GetMoveId() const override { return m_id; }
+
+    private:
+        uint32 m_id;
+        bool m_covered = false;
+};
+
 class TaxiMovementGenerator : public AbstractPathMovementGenerator
 {
     public:

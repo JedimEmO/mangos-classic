@@ -160,6 +160,8 @@ class MotionMaster : private std::stack<MovementGenerator*>
 
         void MovePath(std::vector<G3D::Vector3>& path, ForcedMovement forcedMovement = FORCED_MOVEMENT_NONE, bool flying = false, bool cyclic = true);
         void MovePath(std::vector<G3D::Vector3>& path, float o, ForcedMovement forcedMovement = FORCED_MOVEMENT_NONE, bool flying = false, bool cyclic = true);
+        // A walk along exactly these points, with an id (IdPathMovementGenerator): no path is built, and it ends when covered.
+        void MovePath(uint32 id, std::vector<G3D::Vector3>& path, ForcedMovement forcedMovement = FORCED_MOVEMENT_NONE);
 
         // MovePath can not change speed or flying mid path due to how it works - if you wish to do that, split it into two paths
         void MovePath(int32 pathId = 0, WaypointPathOrigin wpOrigin = PATH_NO_PATH, ForcedMovement forcedMovement = FORCED_MOVEMENT_NONE, bool flying = false, float speed = 0.f, bool cyclic = false, ObjectGuid guid = ObjectGuid());
