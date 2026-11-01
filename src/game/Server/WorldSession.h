@@ -278,6 +278,10 @@ class WorldSession
             m_kickSession = kickSession;
         }
 
+        // Whether the client asked for the log out under way (a logout or /camp, instant or after its countdown), as
+        // against a closed socket, an AFK kick or a GM's kick. Cleared when the client cancels it, and at each login.
+        bool IsClientLogout() const { return m_clientLogout; }
+
         void AfkStateChange(bool state);
 
         /// Is logout cooldown expired?
@@ -848,6 +852,7 @@ class WorldSession
         bool m_inQueue;                                     // session wait in auth.queue
         bool m_playerLoading;                               // code processed in LoginPlayer
         bool m_kickSession;
+        bool m_clientLogout = false;
 
         // True when the player is in the process of logging out (WorldSession::LogoutPlayer is currently executing)
         bool m_playerLogout;

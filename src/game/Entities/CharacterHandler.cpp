@@ -697,6 +697,7 @@ void PlayerbotMgr::LoginPlayerBot(ObjectGuid playerGuid)
 void WorldSession::HandlePlayerLogin(LoginQueryHolder* holder)
 {
     ObjectGuid playerGuid = holder->GetGuid();
+    m_clientLogout = false;
 
     Player* pCurrChar = new Player(this);
     SetPlayer(pCurrChar, playerGuid);

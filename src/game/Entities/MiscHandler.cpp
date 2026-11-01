@@ -289,10 +289,12 @@ void WorldSession::HandleLogoutRequestOpcode(WorldPacket& /*recv_data*/)
     }
     else if (instLogout)
     {
+        m_clientLogout = true;
         LogoutPlayer();
     }
     else
     {
+        m_clientLogout = true;
         LogoutRequest(time(nullptr));
 
         // Set flags and states set by logout:
@@ -310,6 +312,7 @@ void WorldSession::HandleLogoutCancelOpcode(WorldPacket& /*recv_data*/)
     DEBUG_LOG("WORLD: Received opcode CMSG_LOGOUT_CANCEL Message");
 
     LogoutRequest(0);
+    m_clientLogout = false;
 
     WorldPacket data(SMSG_LOGOUT_CANCEL_ACK, 0);
     SendPacket(data);
